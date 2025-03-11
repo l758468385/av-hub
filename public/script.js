@@ -49,7 +49,7 @@ function switchTab(tabName) {
 
 // 添加 API 配置
 const API_CONFIG = {
-    BASE_URL: 'http://127.0.0.1:8000/v1',
+    BASE_URL: '/v1',
     ENDPOINTS: {
         SEARCH: '/avcode',
         COLLECTIONS: '/hacg',
