@@ -1,0 +1,25 @@
+{
+  "app": {
+    "cors_origins": ["*"],
+    "cors_credentials": true,
+    "cors_methods": ["*"],
+    "cors_headers": ["*"],
+    "port": 8000
+  },
+  "files": {
+    "hacg_json_path": "./data/hacg.json",
+    "video_urls_txt_path": "./data/video_urls.txt"
+  },
+  "av_spider": {
+    "source_url": "https://missav.ai/cn/search/",
+    "proxy_url": "http://192.168.50.3:7890",
+    "use_proxy": false
+  },
+  "hacg_spider": {
+    "source_url": "https://www.hacg.mov/wp/"
+  },
+  "logging": {
+    "log_file": "main.log",
+    "level": "info"
+  }
+} 
