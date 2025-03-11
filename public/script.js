@@ -136,34 +136,128 @@ async function searchMagnet() {
         const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}/${searchTerm}`);
 
         const data = await response.json();
-
+        console.log('data',data);
         if (Array.isArray(data.data) && data.data.length > 0) {
 
             // 先显示搜索结果
 
             const formattedResults = data.data.map(result => {
-
+                // 检查result是否是数组
                 if (Array.isArray(result)) {
-
-                    return result;
-
+                    // 如果是数组，确保它至少有一个元素用作磁力链接
+                    return result.length >= 4 ? result : [result[0] || '', result[1] || '', result[2] || '', result[3] || ''];
                 }
-
-                // 如果结果是字符串，尝试解析
-
-                try {
-
-                    return JSON.parse(result.replace(/'/g, '"'));
-
-                } catch (e) {
-
-                    console.error('解析结果出错:', e);
-
-                    return null;
-
+                
+                // 如果是字符串并且看起来像磁力链接
+                if (typeof result === 'string') {
+                    // 尝试从字符串中提取有用信息
+                    let title = '';
+                    let size = '';
+                    let date = '';
+                    
+                    // 首先清理掉所有换行符和多余空格
+                    const cleanResult = result.replace(/[\r\n\t]+/g, ' ').trim();
+                    
+                    // 如果字符串包含分隔符，可能包含其他信息
+                    if (cleanResult.includes(',')) {
+                        // 尝试解析格式: "磁力链接,标题,大小,日期"
+                        const parts = cleanResult.split(',').map(p => p.trim());
+                        let magnet = parts[0];
+                        
+                        // 检查是否有标题、大小和日期
+                        if (parts.length > 1) {
+                            // 标题通常在第二个部分
+                            title = parts[1] || '';
+                            
+                            // 尝试识别大小和日期
+                            for (let i = 2; i < parts.length; i++) {
+                                const part = parts[i];
+                                // 检查是否像大小 (包含 KB, MB, GB, TB)
+                                if (/\d+(\.\d+)?\s*(KB|MB|GB|TB)/i.test(part)) {
+                                    size = part;
+                                } 
+                                // 检查是否像日期 (2022-01-01 或 2022/01/01)
+                                else if (/\d{4}[-\/]\d{1,2}[-\/]\d{1,2}/.test(part)) {
+                                    date = part;
+                                }
+                                // 如果还没有标题，可能这是标题
+                                else if (!title) {
+                                    title = part;
+                                }
+                            }
+                        }
+                        
+                        return [magnet, title, size, date];
+                    }
+                    
+                    // 检查dn参数是否包含额外信息
+                    if (cleanResult.includes('&dn=')) {
+                        const dnMatch = cleanResult.match(/&dn=([^&]+)/);
+                        if (dnMatch && dnMatch[1]) {
+                            let dnValue = decodeURIComponent(dnMatch[1].replace(/\+/g, ' '));
+                            
+                            // 尝试从dn值中提取信息
+                            const dnParts = dnValue.split(',').map(p => p.trim());
+                            title = dnParts[0] || '';
+                            
+                            // 尝试识别大小和日期
+                            for (let i = 1; i < dnParts.length; i++) {
+                                const part = dnParts[i];
+                                // 检查是否像大小 (包含 KB, MB, GB, TB)
+                                if (/\d+(\.\d+)?\s*(KB|MB|GB|TB)/i.test(part)) {
+                                    size = part;
+                                } 
+                                // 检查是否像日期 (2022-01-01 或 2022/01/01)
+                                else if (/\d{4}[-\/]\d{1,2}[-\/]\d{1,2}/.test(part)) {
+                                    date = part;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 如果仍然没有标题，从磁力链接提取
+                    if (!title && cleanResult.startsWith('magnet:')) {
+                        try {
+                            // 从磁力链接中提取hash部分作为标题的一部分
+                            const btih = cleanResult.match(/btih:([a-zA-Z0-9]+)/i);
+                            title = btih ? `磁力链接 (${btih[1].substring(0, 8)}...)` : '磁力链接';
+                        } catch (e) {
+                            title = '磁力链接';
+                        }
+                    } else if (!title) {
+                        // 不是磁力链接，使用字符串前部分作为标题
+                        title = cleanResult.length > 30 ? cleanResult.substring(0, 30) + '...' : cleanResult;
+                    }
+                    
+                    // 如果没有日期，使用当前日期
+                    if (!date) {
+                        const now = new Date();
+                        date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                    }
+                    
+                    return [cleanResult, title, size, date];
                 }
-
-            }).filter(result => result !== null);
+                
+                // 如果是对象
+                if (typeof result === 'object' && result !== null) {
+                    try {
+                        // 尝试从对象中提取需要的字段
+                        return [
+                            result.link || result.magnet || result.url || '',
+                            result.title || result.name || '',
+                            result.size || '',
+                            result.date || result.time || ''
+                        ];
+                    } catch (e) {
+                        console.error('处理对象结果出错:', e);
+                        return null;
+                    }
+                }
+                
+                // 其他情况返回空数组
+                console.warn('未知的结果类型:', typeof result);
+                return null;
+            }).filter(result => result !== null && result[0]);
 
             displaySearchResults(formattedResults);
 
@@ -228,53 +322,59 @@ function displaySearchResults(results) {
     }
 
     const html = results.map(([magnet, title, size, date]) => {
+        // 清理磁力链接中的不安全字符
+        const cleanMagnet = magnet ? magnet.replace(/[\r\n\t]+/g, ' ').trim() : '';
+        
+        // 将可能破坏HTML的字符进行转义
+        const escapedMagnet = cleanMagnet
+            .replace(/'/g, "\\'")
+            .replace(/"/g, '\\"')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        
+        // 确保标题不为空
+        const safeTitle = title || '未知标题';
+        
+        // 确保大小和日期有值
+        const safeSize = size || '未知大小';
+        const safeDate = date || '未知日期';
 
-        const tags = extractTags(title);
+        const tags = extractTags(safeTitle);
 
         const tagsHtml = tags.map(tag => {
-
             return `<div class="tag" data-type="${tag.type}">${getTagLabel(tag.type)}</div>`;
-
         }).join('');
 
         return `
-
             <div class="magnet-item p-6 rounded-xl">
-
                 <div class="flex flex-col gap-4">
-
-                    <h3 class="font-medium text-inherit break-all">${title}</h3>
-
+                    <h3 class="font-medium text-inherit break-all">${safeTitle}</h3>
                     <div class="flex flex-wrap gap-2">
-
                         ${tagsHtml}
-
                     </div>
-
                     <p class="text-sm text-inherit opacity-75">
-
-                        ${translations[currentLang].size}: ${size} | ${translations[currentLang].date}: ${date}
-
+                        ${translations[currentLang].size}: ${safeSize} | ${translations[currentLang].date}: ${safeDate}
                     </p>
-
-                    <button onclick="copyToClipboard('${magnet}')" 
-
-                            class="copy-button w-full px-4 py-2 rounded-lg text-sm font-medium text-white">
-
+                    <button data-magnet="${escapedMagnet}" class="copy-button w-full px-4 py-2 rounded-lg text-sm font-medium text-white">
                         ${translations[currentLang].copyButton}
-
                     </button>
-
                 </div>
-
             </div>
-
         `;
-
     }).join('');
 
     resultsDiv.innerHTML = html;
-
+    
+    // 添加复制按钮事件监听器
+    document.querySelectorAll('.copy-button').forEach(button => {
+        button.addEventListener('click', function() {
+            const magnetLink = this.getAttribute('data-magnet');
+            if (magnetLink) {
+                copyToClipboard(magnetLink);
+            }
+        });
+    });
 }
 
 // 处理番号格式并显示封面图片
@@ -1329,7 +1429,15 @@ async function loadCollections() {
 function copyToClipboard(text) {
     const notification = document.getElementById('notification');
     
-    navigator.clipboard.writeText(text).then(() => {
+    // 解码HTML实体
+    const decodedText = text
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/\\'/g, "'")
+        .replace(/\\"/g, '"');
+    
+    navigator.clipboard.writeText(decodedText).then(() => {
         // 成功复制通知
         notification.innerHTML = `
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1345,6 +1453,7 @@ function copyToClipboard(text) {
             notification.style.background = ''; // 重置背景色为默认值
         }, 3000);
     }).catch(err => {
+        console.error('复制失败:', err);
         // 复制失败通知
         notification.innerHTML = `
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
