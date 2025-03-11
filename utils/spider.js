@@ -10,7 +10,8 @@ class AVSpider {
     this.avCode = avCode.toLowerCase();
     const avSpiderConfig = config.get('av_spider');
     this.sourceUrl = avSpiderConfig.source_url;
-    this.proxyUrl = avSpiderConfig.use_proxy ? avSpiderConfig.proxy_url : null;
+    // this.proxyUrl = avSpiderConfig.use_proxy ? avSpiderConfig.proxy_url : null;
+    this.proxyUrl = null;
     
     // 设置请求头
     this.headers = {
